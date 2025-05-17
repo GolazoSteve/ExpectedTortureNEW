@@ -1,0 +1,31 @@
+name: Giants Daily Result Bot
+
+on:
+  schedule:
+    - cron: '0 12 * * *'  # Runs every day at 12:00 UTC = 5am Pacific
+  workflow_dispatch:      # Optional manual run
+
+jobs:
+  run-result-bot:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run script
+        env:
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+        run: |
+          echo "$GOOGLE_SERVICE_ACCOUNT_JSON" > credentials.json
+          python result_to_drive.py
