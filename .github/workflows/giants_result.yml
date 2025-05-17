@@ -2,12 +2,17 @@ name: Giants Daily Result Bot
 
 on:
   schedule:
-    - cron: '0 12 * * *'  # Runs every day at 12:00 UTC = 5am Pacific
-  workflow_dispatch:      # Enables the manual "Run workflow" button
+    - cron: '0 12 * * *'  # Every day at 12:00 UTC = 5am PT
+  workflow_dispatch:      # Allows manual trigger from GitHub UI
 
 jobs:
   run-result-bot:
     runs-on: ubuntu-latest
+
+    env:
+      DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+      GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
     steps:
       - name: Check out repository
@@ -22,11 +27,9 @@ jobs:
         run: |
           pip install -r requirements.txt
 
-      - name: Decode and save credentials.json
+      - name: Decode service account JSON
         run: |
-          echo "${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}" | base64 -d > credentials.json
+          echo "${GOOGLE_SERVICE_ACCOUNT_JSON}" > credentials.json
 
       - name: Run result bot
-        env:
-          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
         run: python result_to_drive.py
