@@ -44,35 +44,20 @@ def get_play_by_play(game_pk):
 
 # --- WADE RECAP GENERATION ---
 def generate_recap(plays):
-    with open("wade_prompt.txt", "r") as f:
-        prompt = f.read()
+    import pprint
+    pp = pprint.PrettyPrinter(depth=4, sort_dicts=False)
 
-    formatted_plays = []
-    valid_plays = 0
-    for play in plays:
-        about = play.get("about", {})
-        result = play.get("result", {})
+    print(f"🔢 Total plays fetched: {len(plays)}")
+    print(f"\n🧾 Full play-by-play data:\n")
 
-        inning = about.get("inning")
-        half = about.get("inningHalf")
-        desc = result.get("description") or result.get("event")
+    for i, play in enumerate(plays):
+        print(f"\n--- Play {i+1} ---")
+        pp.pprint(play)
 
-        if inning and half and desc:
-            formatted_plays.append(f"{half} {inning}: {desc}")
-            valid_plays += 1
+    # Stop here so we don’t accidentally burn an OpenAI call on bad data
+    print("\n⛔ Skipping OpenAI call — debug mode only.")
+    return "DEBUG: Skipping recap generation — see play-by-play output above."
 
-    print(f"Valid formatted plays: {valid_plays}")
-    print("Preview of formatted plays:\n", "\n".join(formatted_plays[:5]))
-
-    full_prompt = f"{prompt}\n\nPLAY BY PLAY DATA:\n" + "\n".join(formatted_plays) + "\n\nWrite a 300–400 word recap in WADE’s voice."
-
-    res = openai.chat.completions.create(
-        model="gpt-4",
-        messages=[{"role": "user", "content": full_prompt}],
-        temperature=0.7
-    )
-
-    return res.choices[0].message.content
 
 
 
