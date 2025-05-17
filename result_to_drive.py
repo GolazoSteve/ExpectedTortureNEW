@@ -48,14 +48,19 @@ def generate_recap(plays):
         prompt = f.read()
 
     formatted_plays = []
+    valid_plays = 0
     for play in plays:
         try:
             inning = play["about"]["inning"]
             half = play["about"]["inningHalf"]
-            desc = play["result"]["description"]
+            desc = play.get("result", {}).get("description") or play.get("result", {}).get("event") or "No description"
             formatted_plays.append(f"{half} {inning}: {desc}")
+            valid_plays += 1
         except KeyError:
-            continue  # skip incomplete plays
+            continue
+
+    print(f"Valid formatted plays: {valid_plays}")
+    print("Preview of formatted plays:\n", "\n".join(formatted_plays[:5]))
 
     full_prompt = f"{prompt}\n\nPLAY BY PLAY DATA:\n" + "\n".join(formatted_plays) + "\n\nWrite a 300–400 word recap in WADE’s voice."
 
@@ -66,7 +71,6 @@ def generate_recap(plays):
     )
 
     return res.choices[0].message.content
-
 
 # --- DRIVE UPLOAD ---
 def upload_to_drive():
@@ -96,9 +100,10 @@ if __name__ == "__main__":
     print(outcome)
 
     plays = get_play_by_play(game_pk)
+    print(f"Total plays fetched: {len(plays)}")
+
     recap_html = generate_recap(plays)
 
-    # Append recap to basic HTML
     with open(html_path, "w", encoding="utf-8") as f:
         f.write(f"<h2>{outcome}</h2>\n")
         f.write(f"<p>Final Score: {giants_team} {giants_score}, {opp_team} {opp_score}</p>\n")
