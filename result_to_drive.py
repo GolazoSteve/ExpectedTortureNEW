@@ -50,14 +50,16 @@ def generate_recap(plays):
     formatted_plays = []
     valid_plays = 0
     for play in plays:
-        try:
-            inning = play["about"]["inning"]
-            half = play["about"]["inningHalf"]
-            desc = play.get("result", {}).get("description") or play.get("result", {}).get("event") or "No description"
+        about = play.get("about", {})
+        result = play.get("result", {})
+
+        inning = about.get("inning")
+        half = about.get("inningHalf")
+        desc = result.get("description") or result.get("event")
+
+        if inning and half and desc:
             formatted_plays.append(f"{half} {inning}: {desc}")
             valid_plays += 1
-        except KeyError:
-            continue
 
     print(f"Valid formatted plays: {valid_plays}")
     print("Preview of formatted plays:\n", "\n".join(formatted_plays[:5]))
@@ -71,6 +73,8 @@ def generate_recap(plays):
     )
 
     return res.choices[0].message.content
+
+
 
 # --- DRIVE UPLOAD ---
 def upload_to_drive():
