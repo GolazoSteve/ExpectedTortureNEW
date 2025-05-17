@@ -47,12 +47,17 @@ def generate_recap(plays):
     with open("wade_prompt.txt", "r") as f:
         prompt = f.read()
 
-    formatted_plays = "\n".join(
-        f"{play['about']['inningHalf']} {play['about']['inning']}: {play['result']['description']}"
-        for play in plays
-    )
+    formatted_plays = []
+    for play in plays:
+        try:
+            inning = play["about"]["inning"]
+            half = play["about"]["inningHalf"]
+            desc = play["result"]["description"]
+            formatted_plays.append(f"{half} {inning}: {desc}")
+        except KeyError:
+            continue  # skip incomplete plays
 
-    full_prompt = f"{prompt}\n\nPLAY BY PLAY DATA:\n{formatted_plays}\n\nWrite a 300–400 word recap in WADE’s voice."
+    full_prompt = f"{prompt}\n\nPLAY BY PLAY DATA:\n" + "\n".join(formatted_plays) + "\n\nWrite a 300–400 word recap in WADE’s voice."
 
     res = openai.chat.completions.create(
         model="gpt-4",
@@ -61,6 +66,7 @@ def generate_recap(plays):
     )
 
     return res.choices[0].message.content
+
 
 # --- DRIVE UPLOAD ---
 def upload_to_drive():
