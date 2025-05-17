@@ -3,7 +3,7 @@ name: Giants Daily Result Bot
 on:
   schedule:
     - cron: '0 12 * * *'  # Runs every day at 12:00 UTC = 5am Pacific
-  workflow_dispatch:      # Optional manual run
+  workflow_dispatch:      # Enables the manual "Run workflow" button
 
 jobs:
   run-result-bot:
@@ -23,12 +23,10 @@ jobs:
           pip install -r requirements.txt
 
       - name: Decode and save credentials.json
-  run: |
-    echo "${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}" | base64 -d > credentials.json
+        run: |
+          echo "${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}" | base64 -d > credentials.json
 
-- name: Run result bot
-  env:
-    DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
-  run: python result_to_drive.py
-
-
+      - name: Run result bot
+        env:
+          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+        run: python result_to_drive.py
