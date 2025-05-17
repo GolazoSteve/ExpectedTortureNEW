@@ -44,22 +44,39 @@ def get_play_by_play(game_pk):
 
 # --- WADE RECAP GENERATION ---
 def generate_recap(plays):
-    import pprint
-    pp = pprint.PrettyPrinter(depth=4, sort_dicts=False)
+    with open("wade_prompt.txt", "r") as f:
+        prompt = f.read()
 
-    print(f"🔢 Total plays fetched: {len(plays)}")
-    print(f"\n🧾 Full play-by-play data:\n")
+    formatted_plays = []
+    for play in plays:
+        try:
+            inning = play["about"]["inning"]
+            half = play["about"]["halfInning"]  # <- FIXED HERE
+            desc = play["result"]["description"]
+            line = f"{half} {inning}: {desc}"
+            formatted_plays.append(line)
+            print(line)  # Optional: debug output
+        except KeyError:
+            continue  # skip incomplete plays
 
-    for i, play in enumerate(plays):
-        print(f"\n--- Play {i+1} ---")
-        pp.pprint(play)
+    print(f"Total plays fetched: {len(plays)}")
+    print(f"Valid formatted plays: {len(formatted_plays)}")
+    print("Preview of formatted plays:")
+    for i in range(min(5, len(formatted_plays))):
+        print(formatted_plays[i])
 
-    # Stop here so we don’t accidentally burn an OpenAI call on bad data
-    print("\n⛔ Skipping OpenAI call — debug mode only.")
-    return "DEBUG: Skipping recap generation — see play-by-play output above."
+    if not formatted_plays:
+        return "DEBUG: Skipping recap generation — see play-by-play output above."
 
+    full_prompt = f"{prompt}\n\nPLAY BY PLAY DATA:\n" + "\n".join(formatted_plays) + "\n\nWrite a 300–400 word recap in WADE’s voice."
 
+    res = openai.chat.completions.create(
+        model="gpt-4",
+        messages=[{"role": "user", "content": full_prompt}],
+        temperature=0.7
+    )
 
+    return res.choices[0].message.content
 
 # --- DRIVE UPLOAD ---
 def upload_to_drive():
@@ -89,10 +106,9 @@ if __name__ == "__main__":
     print(outcome)
 
     plays = get_play_by_play(game_pk)
-    print(f"Total plays fetched: {len(plays)}")
-
     recap_html = generate_recap(plays)
 
+    # Append recap to basic HTML
     with open(html_path, "w", encoding="utf-8") as f:
         f.write(f"<h2>{outcome}</h2>\n")
         f.write(f"<p>Final Score: {giants_team} {giants_score}, {opp_team} {opp_score}</p>\n")
