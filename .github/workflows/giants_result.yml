@@ -22,10 +22,12 @@ jobs:
         run: |
           pip install -r requirements.txt
 
-      - name: Run script
-        env:
-          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
-          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
-        run: |
-          echo "$GOOGLE_SERVICE_ACCOUNT_JSON" > credentials.json
-          python result_to_drive.py
+      - name: Decode and save credentials.json
+  run: |
+    echo "${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}" | base64 -d > credentials.json
+
+- name: Run result bot
+  env:
+    DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+  run: python result_to_drive.py
+
