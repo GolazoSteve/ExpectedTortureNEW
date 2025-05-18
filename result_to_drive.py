@@ -71,9 +71,9 @@ def generate_recap(plays):
     full_prompt = f"{prompt}\n\nPLAY BY PLAY DATA:\n" + "\n".join(formatted_plays) + "\n\nWrite a 300–400 word recap in WADE’s voice."
 
     res = openai.chat.completions.create(
-        model="gpt-4",
+        model="gpt-4.1-nano",
         messages=[{"role": "user", "content": full_prompt}],
-        temperature=0.7
+        temperature=0.6
     )
 
     return res.choices[0].message.content
