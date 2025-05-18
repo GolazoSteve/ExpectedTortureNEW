@@ -2,10 +2,11 @@ import os
 import json
 import requests
 import openai
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
-# Adjust for West Coast late-night games ending after midnight UTC
-game_date = (datetime.now(timezone.utc) - timedelta(hours=10)).date().isoformat()
+# Always use yesterday's date
+game_date = (datetime.now() - timedelta(days=1)).date().isoformat()
+
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
