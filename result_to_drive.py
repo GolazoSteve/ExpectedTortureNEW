@@ -52,6 +52,33 @@ def get_play_by_play(game_pk):
     all_plays = res["liveData"]["plays"]["allPlays"]
     return all_plays
 
+# --- NEW: Extract structured scoring summary ---
+def extract_scoring_summary(plays):
+    summary = []
+    score = {"away": 0, "home": 0}
+    team_lookup = {}
+
+    for play in plays:
+        result = play.get("result", {})
+        about = play.get("about", {})
+        runners = play.get("runners", [])
+        desc = result.get("description", "")
+        inning = about.get("inning")
+        half = about.get("halfInning")
+
+        batting_team = about.get("battingTeamId")
+        if batting_team:
+            team_lookup[batting_team] = play["team"]["name"] if "team" in play else ""
+
+        for runner in runners:
+            if runner.get("details", {}).get("event") in ["score"]:
+                runner_name = runner["details"].get("runner", {}).get("fullName", "Runner")
+                team = half.upper()
+                line = f"{team} {inning}: {runner_name} scores on {desc}"
+                summary.append(line)
+
+    return summary
+
 # --- WADE RECAP GENERATION ---
 def generate_recap(plays):
     with open("wade_prompt.txt", "r") as f:
@@ -65,20 +92,13 @@ def generate_recap(plays):
             desc = play["result"]["description"]
             line = f"{half} {inning}: {desc}"
             formatted_plays.append(line)
-            print(line)
         except KeyError:
             continue
 
-    print(f"Total plays fetched: {len(plays)}")
-    print(f"Valid formatted plays: {len(formatted_plays)}")
-    print("Preview of formatted plays:")
-    for i in range(min(5, len(formatted_plays))):
-        print(formatted_plays[i])
+    scoring_summary = extract_scoring_summary(plays)
+    scoring_text = "Scoring Summary:\n" + "\n".join(scoring_summary) + "\n\n"
 
-    if not formatted_plays:
-        return "DEBUG: Skipping recap generation — see play-by-play output above."
-
-    full_prompt = f"{prompt}\n\nPLAY BY PLAY DATA:\n" + "\n".join(formatted_plays) + "\n\nWrite a 300–400 word recap in WADE’s voice."
+    full_prompt = f"{prompt}\n\n{scoring_text}PLAY BY PLAY DATA:\n" + "\n".join(formatted_plays) + "\n\nWrite a 300–400 word recap in WADE’s voice."
 
     res = openai.chat.completions.create(
         model="gpt-4.1-nano",
