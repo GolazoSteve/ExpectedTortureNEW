@@ -4,10 +4,6 @@ import requests
 import openai
 from datetime import datetime, timedelta
 
-# Always use yesterday's date
-game_date = (datetime.now() - timedelta(days=1)).date().isoformat()
-
-
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
@@ -15,9 +11,18 @@ from googleapiclient.http import MediaFileUpload
 # --- CONFIG ---
 openai.api_key = os.environ["OPENAI_API_KEY"]
 DRIVE_FOLDER_ID = os.environ["DRIVE_FOLDER_ID"]
-game_pk = 777891  # A's at Giants — May 16, 2025
-html_filename = f"summary-2025-05-16.html"
-html_path = f"./{html_filename}"
+
+# --- DETERMINE MOST RECENT GIANTS GAME ---
+def find_most_recent_giants_game():
+    yesterday = (datetime.now() - timedelta(days=1)).date().isoformat()
+    url = f"https://statsapi.mlb.com/api/v1/schedule/games/?sportId=1&date={yesterday}"
+    res = requests.get(url).json()
+    games = res.get("dates", [])[0].get("games", [])
+    for game in games:
+        teams = game["teams"]
+        if teams["away"]["team"]["name"] == "San Francisco Giants" or teams["home"]["team"]["name"] == "San Francisco Giants":
+            return game["gamePk"], yesterday
+    return None, None
 
 # --- MLB RESULT FETCH ---
 def get_game_result(game_pk):
@@ -56,13 +61,13 @@ def generate_recap(plays):
     for play in plays:
         try:
             inning = play["about"]["inning"]
-            half = play["about"]["halfInning"]  # <- FIXED HERE
+            half = play["about"]["halfInning"]
             desc = play["result"]["description"]
             line = f"{half} {inning}: {desc}"
             formatted_plays.append(line)
-            print(line)  # Optional: debug output
+            print(line)
         except KeyError:
-            continue  # skip incomplete plays
+            continue
 
     print(f"Total plays fetched: {len(plays)}")
     print(f"Valid formatted plays: {len(formatted_plays)}")
@@ -84,7 +89,7 @@ def generate_recap(plays):
     return res.choices[0].message.content
 
 # --- DRIVE UPLOAD ---
-def upload_to_drive():
+def upload_to_drive(html_path, html_filename):
     creds_path = "credentials.json"
     with open(creds_path, "r") as f:
         creds_data = json.load(f)
@@ -105,7 +110,12 @@ def upload_to_drive():
 
 # --- MAIN LOGIC ---
 if __name__ == "__main__":
-    print(f"Checking result for: 2025-05-16")
+    game_pk, game_date = find_most_recent_giants_game()
+    if not game_pk:
+        print("❌ No recent Giants game found.")
+        exit()
+
+    print(f"Checking result for: {game_date}")
 
     outcome, giants_score, opp_score, giants_team, opp_team = get_game_result(game_pk)
     print(outcome)
@@ -113,11 +123,13 @@ if __name__ == "__main__":
     plays = get_play_by_play(game_pk)
     recap_html = generate_recap(plays)
 
-    # Append recap to basic HTML
+    html_filename = f"summary-{game_date}.html"
+    html_path = f"./{html_filename}"
+
     with open(html_path, "w", encoding="utf-8") as f:
         f.write(f"<h2>{outcome}</h2>\n")
         f.write(f"<p>Final Score: {giants_team} {giants_score}, {opp_team} {opp_score}</p>\n")
         f.write(f"<div>{recap_html}</div>\n")
 
-    upload_to_drive()
+    upload_to_drive(html_path, html_filename)
     print("✅ Recap uploaded.")
