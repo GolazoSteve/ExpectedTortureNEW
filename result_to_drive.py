@@ -3,6 +3,7 @@ import json
 import requests
 import openai
 from datetime import datetime, timedelta
+import re
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -52,53 +53,55 @@ def get_play_by_play(game_pk):
     all_plays = res["liveData"]["plays"]["allPlays"]
     return all_plays
 
-# --- NEW: Extract structured scoring summary ---
-def extract_scoring_summary(plays):
-    summary = []
-    score = {"away": 0, "home": 0}
-    team_lookup = {}
-
-    for play in plays:
-        result = play.get("result", {})
-        about = play.get("about", {})
-        runners = play.get("runners", [])
-        desc = result.get("description", "")
-        inning = about.get("inning")
-        half = about.get("halfInning")
-
-        batting_team = about.get("battingTeamId")
-        if batting_team:
-            team_lookup[batting_team] = play["team"]["name"] if "team" in play else ""
-
-        for runner in runners:
-            if runner.get("details", {}).get("event") in ["score"]:
-                runner_name = runner["details"].get("runner", {}).get("fullName", "Runner")
-                team = half.upper()
-                line = f"{team} {inning}: {runner_name} scores on {desc}"
-                summary.append(line)
-
-    return summary
-
-# --- WADE RECAP GENERATION ---
-def generate_recap(plays):
-    with open("wade_prompt.txt", "r") as f:
-        prompt = f.read()
-
-    formatted_plays = []
+# --- FORMAT PLAYS ---
+def format_plays(plays):
+    formatted = []
     for play in plays:
         try:
             inning = play["about"]["inning"]
             half = play["about"]["halfInning"]
             desc = play["result"]["description"]
             line = f"{half} {inning}: {desc}"
-            formatted_plays.append(line)
+            formatted.append(line)
         except KeyError:
             continue
+    return formatted
 
-    scoring_summary = extract_scoring_summary(plays)
-    scoring_text = "Scoring Summary:\n" + "\n".join(scoring_summary) + "\n\n"
+# --- NEW: Summarise runs with score tracking ---
+def summarise_runs(formatted_plays):
+    score = {'SF': 0, 'OPP': 0}
+    timeline = []
+    for play in formatted_plays:
+        match = re.match(r'(top|bottom) (\d+): (.+)', play)
+        if not match:
+            continue
+        half, inning, desc = match.groups()
+        runs = desc.count("scores")
+        if runs == 0:
+            continue
+        team = 'SF' if half == 'bottom' else 'OPP'
+        score[team] += runs
+        timeline.append(f"{half.capitalize()} {inning}: {desc} → Giants {score['SF']}, Opponent {score['OPP']}")
+    final = f"Final Score: Giants {score['SF']}, Opponent {score['OPP']}"
+    return final, timeline
 
-    full_prompt = f"{prompt}\n\n{scoring_text}PLAY BY PLAY DATA:\n" + "\n".join(formatted_plays) + "\n\nWrite a 300–400 word recap in WADE’s voice."
+# --- WADE RECAP GENERATION ---
+def generate_recap(plays):
+    with open("wade_prompt.txt", "r") as f:
+        prompt = f.read()
+
+    formatted_plays = format_plays(plays)
+    final_score, score_timeline = summarise_runs(formatted_plays)
+
+    scoring_summary = final_score + "\nScoring Timeline:\n" + "\n".join(score_timeline)
+
+    full_prompt = (
+        f"{prompt}\n\n"
+        f"{scoring_summary}\n\n"
+        f"Use this scoring sequence and final score exactly. Do not invent alternate scores.\n\n"
+        f"PLAY BY PLAY DATA:\n" + "\n".join(formatted_plays) +
+        "\n\nWrite a 300–400 word recap in WADE’s voice."
+    )
 
     res = openai.chat.completions.create(
         model="gpt-4.1-nano",
