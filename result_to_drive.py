@@ -41,7 +41,7 @@ def get_play_by_play(game_pk):
     data = requests.get(url).json()
     return data["liveData"]["plays"]["allPlays"]
 
-# --- FORMAT PLAY-BY-PLAY FOR PROMPT ---
+# --- FORMAT PLAY-BY-PLAY ---
 def format_plays(plays):
     out = []
     for p in plays:
@@ -54,48 +54,42 @@ def format_plays(plays):
             continue
     return out
 
-# --- SCORING SUMMARY FROM PLAYS ---
-def summarise_runs(formatted_plays):
+# --- GENERATE FACTUAL DRY-STYLE GAME SUMMARY ---
+def generate_factual_recap(plays, giants_name, opp_name):
+    lines = []
     score = {"SF": 0, "OPP": 0}
-    timeline = []
-    for play in formatted_plays:
-        match = re.match(r"(top|bottom) (\d+): (.+)", play)
-        if not match:
+    for p in plays:
+        try:
+            desc = p["result"]["description"]
+            inning = p["about"]["inning"]
+            half = p["about"]["halfInning"]
+            runs = desc.count("scores")
+            if runs == 0:
+                continue
+            team = "San Francisco Giants" if half == "top" and giants_name == "San Francisco Giants" else \
+                   "San Francisco Giants" if half == "bottom" and giants_name != "San Francisco Giants" else opp_name
+            lines.append(f"{team} scored in the {half} of the {inning} inning: {desc}")
+        except:
             continue
-        half, inning, desc = match.groups()
-        runs = desc.count("scores")
-        if runs == 0:
-            continue
-        team = "SF" if half == "bottom" else "OPP"
-        score[team] += runs
-        timeline.append(f"{half.capitalize()} {inning}: {desc} → Giants {score['SF']}, Opponent {score['OPP']}")
-    final = f"Final Score: Giants {score['SF']}, Opponent {score['OPP']}"
-    return final, timeline
+    return "\n".join(lines)
 
-# --- NEW: RECAP WITH SYSTEM LOCKED CONTEXT ---
-def generate_recap(plays, giants_score, opp_score, opp_name, outcome_text):
+# --- GPT STYLIZATION FUNCTION ---
+def style_with_wade(factual_recap, outcome_text, final_score, opp_name):
     with open("wade_prompt.txt", "r") as f:
-        wade_background = f.read()
-
-    formatted_plays = format_plays(plays)
-    final_score_text, score_timeline = summarise_runs(formatted_plays)
+        wade_tone = f.read()
 
     system_prompt = (
-        "You are WADE – a sentient, glitchy Waymo vehicle obsessed with the San Francisco Giants. "
-        "You are writing a recap of a Giants game that has already been played. "
-        "You must reflect the real, confirmed outcome: the final score and the scoring summary given to you. "
-        "Do NOT invent a different result or reverse the outcome. This is crucial. "
-        "You are permitted to express anxiety, melancholy, or irrational fear – but do NOT contradict the truth."
+        "You are WADE – a slightly broken, emotionally volatile, poetic AI obsessed with the San Francisco Giants. "
+        "You will rewrite a factual baseball recap in your own voice. DO NOT alter the facts, scores, innings, or players mentioned. "
+        "You may add glitchy humor, anxiety, metaphor, or self-referential commentary – but you may NOT invent new plays or reverse the outcome."
     )
 
     user_prompt = (
-        f"{wade_background}\n\n"
-        f"The San Francisco Giants played the {opp_name} and the result was: {outcome_text}\n"
-        f"Final score: Giants {giants_score}, {opp_name} {opp_score}\n\n"
-        f"Scoring Timeline:\n" + "\n".join(score_timeline) + "\n\n"
-        "Write a 350–400 word recap in WADE’s voice, using dry wit, emotional volatility, and glitchy metaphors. "
-        "Be specific about plays and players. Do not contradict the final score or scoring sequence."
-        "\n\nPLAY-BY-PLAY DATA:\n" + "\n".join(formatted_plays)
+        f"{wade_tone}\n\n"
+        f"The following events describe the game exactly. The final result was: {outcome_text}.\n"
+        f"{final_score}\n\n"
+        f"FACTUAL GAME SUMMARY:\n{factual_recap}\n\n"
+        "Rewrite this as a 350–400 word recap in WADE’s voice. Wrap it in <div>...</div> HTML tags."
     )
 
     response = openai.chat.completions.create(
@@ -119,7 +113,7 @@ def upload_to_drive(filepath, filename):
     media = MediaFileUpload(filepath, mimetype="text/html")
     service.files().create(body=file_metadata, media_body=media, fields="id").execute()
 
-# --- MAIN ---
+# --- MAIN EXECUTION ---
 if __name__ == "__main__":
     game_pk, game_date = find_latest_giants_game()
     if not game_pk:
@@ -128,13 +122,16 @@ if __name__ == "__main__":
 
     outcome, g_score, o_score, g_team, o_team = get_result(game_pk)
     plays = get_play_by_play(game_pk)
-    recap_html = generate_recap(plays, g_score, o_score, o_team, outcome)
+
+    factual = generate_factual_recap(plays, g_team, o_team)
+    final_score_text = f"Final Score: San Francisco Giants {g_score}, {o_team} {o_score}"
+    recap_html = style_with_wade(factual, outcome, final_score_text, o_team)
 
     html_filename = f"summary-{game_date}.html"
     with open(html_filename, "w", encoding="utf-8") as f:
         f.write(f"<h2>{outcome}</h2>\n")
-        f.write(f"<p>Final Score: {g_team} {g_score}, {o_team} {o_score}</p>\n")
-        f.write(f"<div>{recap_html}</div>\n")
+        f.write(f"<p>{final_score_text}</p>\n")
+        f.write(f"{recap_html}\n")
 
     upload_to_drive(html_filename, html_filename)
     print("✅ Recap generated and uploaded:", html_filename)
